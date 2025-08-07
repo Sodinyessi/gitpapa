@@ -1,0 +1,770 @@
+---
+title: "\\textbf{Modelling virological response trajectories to Dolutegravir-based (DTG)
+  ART regimens in West African children, adolescents and young people living with
+  HIV : a comparative analysis from the pediatric West Africa IeDEA cohort}"
+author: "Sophie Desmonde$^{1}$, Joycelyn Dame$^{2}$, Emile Sodinyessi*$^{1}$, Agatha
+  David$^{3}$,  \nSylvie N'Gbeche$^{4}$, Madeleine Amorissani-Folquet$^{5}$, Mariam
+  Sylla$^{6}$,  \nKouadio Kouakou$^{7}$, Lehila Bagnan Tossa$^{8}$, Caroline Yonaba$^{9}$
+  \ \nand Valériane Leroy$^{1}$  \non behalf of the IeDEA West Africa Collaboration\n"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_md: true
+    #pandoc_args: ["--variable", "geometry:margin=0.75cm"]
+  html_document:
+    df_print: paged
+always_allow_html: true
+header-includes:
+  - \usepackage{pdflscape}
+---
+\begin{center}
+{\small
+$^1$University of Toulouse, National Institute for Health and Medical Research (INSERM) UMR 1219, Centre d'Epidémiologie et de Recherche en santé des POPulations (CERPOP), Toulouse, France.\\
+$^2$University of Ghana Medical School, and Korle Bu Teaching Hospital, Accra, Ghana.\\
+$^3$National Institute of Medical Research (NIMR), Lagos, Nigeria.\\
+$^4$CEPREF Enfant, Abidjan, Côte d’Ivoire.\\
+$^5$Cocody University Hospital, Pediatric Department, Abidjan, Côte d’Ivoire.\\
+$^6$Gabriel Toure Children’s Hospital, Bamako, Mali.\\
+$^7$CIRBA, Abidjan, Côte d’Ivoire.\\
+$^8$Centre National Hospitalier Universitaire, Cotonou, Bénin.\\
+$^9$Yalgado Ouédraogo University Hospital, Ouagadougou, Burkina Faso.
+}
+\end{center}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,        # No code
+  message = FALSE,     # No messages 
+  warning = FALSE,     # No warnings
+  results = 'markup'   # seuls les resultats sont affichés
+)
+```
+
+```{r fig.align='center', out.width='100%'}
+knitr::include_graphics("C:/Users/Emile/Desktop/desc_imag_iedea/imag00.png")
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Les packages nécessaires 
+library(VIM) # selc_var
+library(ggplot2) #graphiq
+library(readr) #import dataframe
+library(tidyverse) #manip
+library(dplyr) #manip
+library(lubridate) # for date
+library(haven)
+library(kableExtra)
+library(corrplot)
+library(ggrepel)
+library(tibble) #manip
+library(stringr)
+library(caret) #model machine learning
+library(survival) # pour les modèles de survie :: coxph function of model_cox
+library(survey) # Analyse de survie :: longi
+library(srvyr)
+library(marginaleffects)
+library(networkD3) # Pour le diagramme de Sankey
+library(gtsummary) # Descritpion de la population
+library(gt)
+library(questionr) #freq and others
+library(bslib)
+library(shiny) # pour nécessité avec esquisse
+library(esquisse) # Graphics bivary
+#library(nnet) # Pour la régression multinomiale
+library(labelled)
+library(lcmm) #for model class latente
+library(flexmix) 
+library(randomLCA)
+#rm(list = ls())
+library(janitor)
+library(webshot2)
+library(data.table)
+library(tools)
+```
+
+
+```{r}
+set.seed(1234567)  # Jeu de données aléatoires pour la répétabilité des résultats
+```
+
+```{r}
+#Import data
+chemin_apin <- "C:/Users/Emile/Desktop/IeDEA/DESCRIPTIF MERGER 9 PWADA/MERGER 9 WITH APIN DATABASE 9JUN2025/IeDEA WA Péditarie Merger 9 jul25"
+fichiers_apin <- list.files(path = chemin_apin, pattern = "\\.sas7bdat$", full.names = TRUE)
+wa_apin_tbl <- lapply(fichiers_apin, read_sas)
+names(wa_apin_tbl) <- file_path_sans_ext(basename(fichiers_apin))
+
+full_m9_ped_apin    <- rename_with(wa_apin_tbl$full_m9, tolower) #30,957
+wa_apin_tblbas      <- rename_with(wa_apin_tbl$tblbas, tolower)
+wa_apin_tblart      <- rename_with(wa_apin_tbl$tblart, tolower)
+wa_apin_tblart_v2   <- rename_with(wa_apin_tbl$tblart_v2, tolower)
+wa_apin_tblcenter   <- rename_with(wa_apin_tbl$tblcenter, tolower)
+wa_apin_tbldis      <- rename_with(wa_apin_tbl$tbldis, tolower)
+wa_apin_tbllab      <- rename_with(wa_apin_tbl$tbllab, tolower)
+wa_apin_tbllab_bp   <- rename_with(wa_apin_tbl$tbllab_bp, tolower)
+wa_apin_tbllab_cd4  <- rename_with(wa_apin_tbl$tbllab_cd4, tolower)
+wa_apin_tbllab_rna  <- rename_with(wa_apin_tbl$tbllab_rna, tolower)
+wa_apin_tbllab_viro <- rename_with(wa_apin_tbl$tbllab_viro, tolower)
+wa_apin_tblltfu     <- rename_with(wa_apin_tbl$tblltfu, tolower)
+wa_apin_tblmed      <- rename_with(wa_apin_tbl$tblmed, tolower)
+wa_apin_tblvis      <- rename_with(wa_apin_tbl$tblvis, tolower)
+```
+
+```{r}
+full_m9_ped    <- full_m9_ped_apin %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tblbas      <- wa_apin_tblbas %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tblart      <- wa_apin_tblart %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tblart_v2   <- wa_apin_tblart_v2 %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tblcenter   <- wa_apin_tblcenter %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tbldis      <- wa_apin_tbldis %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tbllab      <- wa_apin_tbllab %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tbllab_bp   <- wa_apin_tbllab_bp %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tbllab_cd4  <- wa_apin_tbllab_cd4 %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tbllab_rna  <- wa_apin_tbllab_rna %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tbllab_viro <- wa_apin_tbllab_viro %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tblltfu     <- wa_apin_tblltfu %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tblmed      <- wa_apin_tblmed %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+wa_tblvis      <- wa_apin_tblvis %>% 
+  filter(program %in% c("CEPREF", "CHUC", "CHUY", "CIRBA", "CNHU", "GABRIEL", "KBTH", "NIMR", "TOKOIN", "YALGADO"))
+```
+
+```{r}
+full_m9_ped <- subset(full_m9_ped, age_last_year < 25) #26,068
+```
+
+
+```{r}
+artx_bis <- read.csv2("C:/Users/Emile/Desktop/IeDEA/Nettoyage données ARVs IeDEA Sophie v19Jul25/art_ids_missing_arvtx.csv")
+```
+
+
+```{r}
+#Update art_selected with the name of art_ids
+tblart_clean <- wa_tblart %>%
+  left_join(
+    artx_bis %>%  dplyr::select(art_id, arvtx_bis),
+    by = "art_id"
+  )
+
+#See if they all have arvtx_bis
+tblart_clean %>%
+  filter(is.na(arvtx_bis) | arvtx_bis == "") %>%
+  distinct(art_id) %>%
+  pull(art_id)
+#Complete manually
+tblart_clean <- tblart_clean %>%
+  mutate(
+    arvtx_bis = case_when(
+      art_id == "J05AE03-L" ~ "RTV",
+      art_id == "J05AE02" ~ "IDV",
+      art_id == "J05AE03-H" ~ "RTV",
+      art_id == "J05AF10" ~ "ETVr",
+      art_id == "J05AF" ~ "NRTI_unspecified",
+      art_id == "J05A" ~ "Unknown",
+      art_id == "J05AG-BIC" ~ "BIC",
+      art_id == "J05AE05" ~ "APV",
+      art_id == "J05AE01-SQH" ~ "SQV",
+      art_id == "J05AE07" ~ "FPV",  #Fos-amprenavir (PI)
+      art_id == "J05AF03" ~ "ddC",
+      art_id == "J05AX-VIC" ~ "Vicriviroc",
+      art_id == "J05AG-CPV" ~ "CPV",  #NNRTI
+      art_id == "J05A-PBT" ~ "Unknown",  #blind trial
+      art_id == "L01XX05" ~ "Litalir", #Other
+      art_id == "J05AR08" ~ "FTC+TDF+RPV",
+      TRUE ~ arvtx_bis
+    )
+  )
+
+#create ART regimen variable
+tblart_clean  <- tblart_clean  %>%
+  group_by(patient, art_sd) %>%
+  mutate(
+    arvtx_fixed = paste(sort(na.omit(unique(arvtx_bis))), collapse = "+")
+  ) %>%
+  ungroup()
+
+
+
+#Delete duplicates of drugs in the same arvtx_fixed entry
+tblart_clean <- tblart_clean %>%
+  mutate(arvtx_fixed = sapply(strsplit(arvtx_fixed, "\\+"), function(drugs) {
+    cleaned <- unique(trimws(drugs))           # remove duplicates + trim whitespace
+    paste(cleaned, collapse = "+")             # rejoin into string
+  }))
+
+#Check if same combination is there twice but in different order and put all in same order
+tblart_clean <- tblart_clean %>%
+  mutate(arvtx_fixed = sapply(strsplit(arvtx_fixed, "\\+"), function(drugs) {
+    cleaned <- sort(unique(trimws(drugs)))   # remove duplicates + sort alphabetically
+    paste(cleaned, collapse = "+")
+  }))
+
+#Different regimens:
+arvtx_table <- tblart_clean  %>%
+  count(arvtx_fixed, sort = TRUE)
+print(arvtx_table, n = nrow(arvtx_table))  # prints the whole table
+kable(arvtx_table)
+
+
+#Define treatment class
+nrtis   <- c("3TC", "ABC", "AZT", "FTC", "TDF", "TAF", "ddI", "d4T", "NRTI_unspecified", "ddC")
+pis     <- c("LPV/r", "ATV", "ATV/r", "DRV", "DRV/r", "NFV", "IDV", "SQV", "TPV", "APV", "FPV", "PI_unspecified")
+instis  <- c("DTG", "BIC", "RAL")
+nnrtis  <- c("EFV", "NVP", "RPV", "ETV", "ETVr", "DLV", "CPV","NNRTI_unspecified")
+entry_fusion <- c("Maraviroc", "Enfurvirtide", "Vicriviroc")
+boosters <- c("RTV", "Cobicistat")
+anchors <- c("DTG", "BIC", "RAL","LPV/r", "ATV", "ATV/r", 
+             "DRV", "DRV/r", "NFV", "IDV", "SQV", "TPV", "APV", "FPV", "PI_unspecified", 
+             "EFV", "NVP", "RPV", "ETV", "ETVr", "DLV", "CPV","NNRTI_unspecified",
+             "Maraviroc", "Enfurvirtide", "Vicriviroc" )
+
+
+
+#Scan suspect regimens
+#They include more than one anchor drug class (e.g., INSTI + PI + NNRTI)
+  #Except DRV+DTG, DRV + RAL, DTG+ETV, DTG+RPV and DRV+ETV =>plausible salvage therapies
+#They include more than 2 NRTIs
+  #Allow if there are exactly 3 NRTIs, and no PIs, NNRTIs, or INSTIs => plausible salvage
+#They include multiple drugs from same class (e.g., EFV + NVP both NNRTIs)
+#Less than 2 NRTIs only are classified as ambigous
+#Anything else is a likely data arror but needs verifying
+
+tblart_clean <- tblart_clean %>%
+  mutate(
+    drug_list = strsplit(arvtx_fixed, "\\+"),
+    
+    n_nrtis  = sapply(drug_list, function(d) sum(trimws(d) %in% nrtis)),
+    n_instis = sapply(drug_list, function(d) sum(trimws(d) %in% instis)),
+    n_nnrtis = sapply(drug_list, function(d) sum(trimws(d) %in% nnrtis)),
+    n_pis    = sapply(drug_list, function(d) sum(trimws(d) %in% pis)),
+    
+    anchor_count = (n_instis > 0) + (n_nnrtis > 0) + (n_pis > 0),
+    
+    has_dtg = sapply(drug_list, function(d) any(trimws(d) == "DTG")),
+    has_drv = sapply(drug_list, function(d) any(trimws(d) %in% c("DRV", "DRV/r"))),
+    has_etv = sapply(drug_list, function(d) any(trimws(d) %in% c("ETV", "ETVr"))),
+    has_rpv = sapply(drug_list, function(d) any(trimws(d) == "RPV")),
+    
+    n_total = sapply(drug_list, length),
+    
+    flag_suspect = n_nrtis > 2 | anchor_count > 1,
+    
+    regimen_classification = case_when(
+      !flag_suspect                                                ~ "Non-suspect",
+      has_dtg & has_drv & anchor_count == 2 & n_nrtis >= 2         ~ "Plausible Salvage",
+      has_dtg & has_etv & anchor_count == 2 & n_nrtis >= 2         ~ "Plausible Salvage",
+      has_drv & has_etv & anchor_count == 2 & n_nrtis >= 2         ~ "Plausible Salvage",
+      has_dtg & has_rpv & anchor_count == 2                        ~ "Plausible Salvage",
+      n_nrtis == 3 & anchor_count == 0                             ~ "Plausible Salvage",
+      anchor_count == 2 & n_nrtis >= 2                             ~ "Ambiguous",
+      TRUE                                                         ~ "Likely Data Error"
+    )
+  )
+
+
+
+tblart_clean <- tblart_clean %>%
+  dplyr::select( -drug_list, -n_nrtis, -n_instis, -n_nnrtis, -n_pis,
+          -anchor_count, -has_dtg, -has_drv, -has_etv, -has_rpv, -n_total,
+          -flag_suspect)
+
+wa_tblart_clean <- tblart_clean
+```
+
+
+```{r include=FALSE}
+##Treatment database ARV
+#Supprimer les lignes qui ne correspondent pas à la molécule principale;
+arv <- subset(wa_tblart_clean, !(art_id %in% c("J05AF01",
+               "J05AF02",
+               "J05AF04",
+               "J05AF05",
+               "J05AF06",
+               "J05AF07",
+               "J05AF09",
+               "J05AR01",
+               "J05AR02")))   #vJul25 :: 23,848obs #10,163p
+
+#Identifier le dernier traitement ARV initi  comme  tant du DTG ou non
+arv <- arv %>%
+  arrange(patient, art_sd) %>%  #
+  group_by(patient) %>% 
+  mutate(lastart_dtg = ifelse(row_number() == n() & art_id %in% c("J05AJ03", "J05AR27"), 1, 0)) %>% 
+  ungroup()
+
+#Create dtg
+arv <- arv %>%
+  mutate(DTG = ifelse(art_id %in% c("J05AJ03", "J05AR27"), 1, 0))
+
+arv <- arv %>% arrange(patient, art_sd)
+#table(arv$DTG) #0 : 19684 & 1 : 4164 
+#table(arv$lastart_dtg) #3,306 
+```
+
+```{r}
+#regimen ART
+#PI <- c("LPV", "ATV", "DRV", "NFV", "IDV", "SQV")= c("J05AE08","J05AR15","J05AE04","J05AE02","J05AE01","J05AE01-S", "J05AE03","J05AE10",J05AR10)
+#NNRTI <- c("EFV", "NVP", "RPV", "DOR", "ETR")= c("J05AG03","J05AG01","J05AG01-SD","J05AG05","J05AR19","J05AG06","J05AR24", "J05AR05", "J05AR07")
+#INSTI <- c("DTG", "RAL", "BIC", "EVG") == c("J05AR13","J05AR21","J05AX12","J05AJ03","J05AJ01","J05AR16","J05AX08", "J05AR20","J05AR09","J05AR18","J05AX11","J05AJ02", "J05AR27")
+
+#arv$art_id=c(J05A J05AE01 J05AE02 J05AE03 J05AE04 J05AE08 J05AE10 J05AG01 J05AG03 J05AJ01 J05AJ03 J05AR03 J05AR05 J05AR07 J05AR10 J05AR11 J05AR12 J05AR23 J05AR27) 
+arv <- arv %>%
+  mutate(
+    art_class = case_when(
+      art_id %in% c("J05AG01", "J05AG03", "J05AR05", "J05AR07","J05AR11") ~ "NNRTI",  # NNRTI PI INSTI
+      art_id %in% c("J05AE01", "J05AE02", "J05AE03", "J05AE04", "J05AE08", "J05AE10", "J05AR10") ~ "PI",  # PI
+      art_id %in% c("J05AJ03", "J05AR27", "J05AJ01", "J05AR23") ~ "INSTI",  # INSTI
+      art_id == "J05A " ~ "UNKNOWN",  # Unknown 
+      TRUE ~ "OTHERS"  #nA_real
+    )
+  )
+ 
+arv <- arv %>%
+  arrange(patient, art_sd) %>%
+  group_by(patient) %>% 
+  mutate(
+    row_num = row_number(),
+    dtg_row = if_else(DTG == 1, row_num, NA_integer_),
+    first_dtg_row = min(dtg_row, na.rm = TRUE),
+    prev_class = case_when(
+      row_num == first_dtg_row & first_dtg_row > 1 ~ lag(art_class),
+      row_num == first_dtg_row                     ~ "naive",
+      TRUE                                         ~ NA_character_
+    ),
+    prev_art_class_before_DTG = prev_class
+  ) %>%
+  ungroup() %>%
+  select(-row_num, -dtg_row, -first_dtg_row, -prev_class)
+
+#list DTG by DES
+DOLUTEGRAVIR <- c("J05AJ03", "J05AR13", "J05AR21","J05AR25", "J05AR27", "J05AX12")
+
+#var == naïf 
+arv <- arv %>%
+  arrange(patient, art_sd) %>%
+  group_by(patient) %>%
+  mutate(naif = if_else(row_number() == 1 & art_id %in% DOLUTEGRAVIR, 1, 0)) %>%
+  ungroup()
+
+```
+
+```{r}
+dtg_date <- arv %>%
+  filter(DTG == 1) %>%
+  dplyr::select(
+    patient,
+    dtg_sd = art_sd)
+
+art_f_0 <- left_join(arv, dtg_date, by = "patient")
+
+art_f_1 <- art_f_0 %>% left_join(wa_tblbas %>% dplyr::select(-recart_y, -program), by ="patient")
+art_f_1 <- art_f_1 %>%
+  mutate(age_init_dtg = as.numeric(difftime(dtg_sd,birth_d, units = "days")/365.25)) #2,823
+
+#Criteria inclusion :: age_init_dtg < 20 years
+art_f_1 <- subset(art_f_1, !is.na(age_init_dtg) & age_init_dtg <20) #2,495
+
+art_f_1 <- art_f_1 %>%
+  mutate(
+    age_class_dtg = case_when(
+      age_init_dtg < 5                      ~ "< 5 years",
+      age_init_dtg >= 5 & age_init_dtg <10  ~ "5-9 years",
+      age_init_dtg >= 10 & age_init_dtg <15 ~ "10-14 years",
+      age_init_dtg >= 15 & age_init_dtg <20 ~ "15-20 years",
+      TRUE        ~ "99"  # Pour > 19 ans
+    )
+  )
+art_f_1$age_class_dtg <- as.factor(art_f_1$age_class_dtg)
+```
+
+
+```{r}
+#######################ART regimen before DTG################################
+wa_tblart_clean <- left_join(wa_tblart_clean, dtg_date, by = "patient")
+
+dtg_0_19_full <- art_f_1
+# Keep only ART rows for children in dtg_0_19_full
+tblart_children <- wa_tblart_clean %>%
+  semi_join(dtg_0_19_full, by = "patient")
+# Count distinct patients with at least one DTG date
+num_patients <- tblart_children %>%
+  summarise(n_patients = n_distinct(patient)) %>%
+  pull(n_patients)
+
+
+#Isolate art_sd just before dtg
+art_before_dtg <- tblart_children %>%
+  filter(art_sd < dtg_sd) %>%
+  arrange(patient, desc(art_sd)) %>%
+  group_by(patient) %>%
+  slice(1) %>%
+  ungroup()
+
+
+# Step 1: Most recent ART line per patient with anchor drug
+anchor_pattern <- str_c(anchors, collapse = "|")
+anchor_lines <- art_before_dtg %>%
+  filter(str_detect(arvtx_fixed, regex(anchor_pattern))) %>%
+  arrange(patient, desc(art_sd)) %>%
+  group_by(patient) %>%
+  slice(1) %>%
+  ungroup()
+# Step 2: Patients with no anchor drug lines
+patients_with_anchor <- unique(anchor_lines$patient)
+
+fallback_lines <- art_before_dtg %>%
+  filter(!patient %in% patients_with_anchor) %>%
+  arrange(patient, desc(art_sd)) %>%
+  group_by(patient) %>%
+  slice(1) %>%
+  ungroup()
+
+# Step 3: Combine both sets
+prev_dtg <- bind_rows(anchor_lines, fallback_lines)
+
+#If ART_ED is missing, assume it's dtg_sd
+prev_dtg  <- prev_dtg  %>%
+  mutate(
+    art_ed = coalesce(art_ed, dtg_sd)  # if art_ed is NA, use dtg_sd
+  )
+
+#Define ART_class 
+#Define treatment class
+nrtis   <- c("3TC", "ABC", "AZT", "FTC", "TDF", "TAF", "ddI", "d4T", "NRTI_unspecified", "ddC")
+pis     <- c("LPV/r", "ATV", "ATV/r", "DRV", "DRV/r", "NFV", "IDV", "SQV", "TPV", "APV", "FPV", "PI_unspecified")
+instis  <- c("DTG", "BIC", "RAL")
+nnrtis  <- c("EFV", "NVP", "RPV", "ETV", "ETVr", "DLV", "CPV","NNRTI_unspecified")
+entry_fusion <- c("Maraviroc", "Enfurvirtide", "Vicriviroc")
+boosters <- c("RTV", "Cobicistat")
+
+prev_dtg <- prev_dtg %>%
+  mutate(
+    has_pi     = str_detect(arvtx_fixed, str_c(pis, collapse = "|")),
+    has_nnrt   = str_detect(arvtx_fixed, str_c(nnrtis, collapse = "|")),
+    has_insti  = str_detect(arvtx_fixed, str_c(instis, collapse = "|")),
+    has_entry  = str_detect(arvtx_fixed, str_c(entry_fusion, collapse = "|")),
+    
+    art_class = case_when(
+      has_pi & has_insti   ~ "PI+INSTI",
+      has_pi & has_nnrt    ~ "PI+NNRTI",
+      has_insti & has_nnrt ~ "INSTI+NNRTI",
+      has_pi & has_entry   ~ "PI+ENTRY",
+      has_insti & has_entry ~ "INSTI+ENTRY",
+      has_pi     ~ "PI",
+      has_insti  ~ "INSTI",
+      has_nnrt   ~ "NNRTI",
+      has_entry  ~ "ENTRY/FUSION",
+      TRUE       ~ "NRTIs"
+    )
+  )
+
+#If classified as a suspect ART regimen then code as unknown
+prev_dtg <- prev_dtg %>%
+  mutate(
+    art_class = if_else(regimen_classification %in% c("Ambiguous", "Likely Data Error"), "Unknown", art_class)
+  )
+
+#Rename ART_class as "prev_art_class"
+#Rename art_ed as "prev_art_end_d"
+
+prev_dtg <- prev_dtg %>%
+  rename(
+    prev_art_class   = art_class,
+    prev_art_end_d   = art_ed,
+    prev_art_regimen = arvtx_fixed
+  )
+
+#Keep a table with just these variables and patient and add to full_dtg table
+# Step 1: Keep only relevant variables from prev_dtg
+prev_dtg_trimmed <- prev_dtg %>%
+  select(patient, prev_art_class, prev_art_end_d, prev_art_regimen)
+
+# Step 2: Join into full_dtg table
+dtg_0_19_full <- dtg_0_19_full %>%
+  left_join(prev_dtg_trimmed, by = "patient")
+
+#Calculate time between prev_art_ed and dtg_sd
+dtg_0_19_full <- dtg_0_19_full %>%
+  mutate(
+    time_from_prev_end_to_dtg_months = time_length(interval(prev_art_end_d, dtg_sd), unit = "months")
+  )
+
+dtg_0_19_full <- dtg_0_19_full %>%
+  mutate(
+    prev_art_class_vf = case_when(
+      is.na(prev_art_class) ~ "naive",
+      time_from_prev_end_to_dtg_months >= 6 ~ "reinitiator",
+      TRUE ~ prev_art_class  # for everyone else
+    )
+  )
+
+#Create an indicator variable for tt interruption < 6 months prior to DTG initiation
+dtg_0_19_full <- dtg_0_19_full %>%
+  mutate(
+    tt_interruption = if_else(
+      time_from_prev_end_to_dtg_months >= 1 & time_from_prev_end_to_dtg_months < 6,
+      1, 0, missing = 0
+    )
+  )
+
+# Now count previous first_line
+dtg_0_19_full %>%
+  count(prev_art_class_vf, name = "n") %>%
+  arrange(desc(n))
+
+#NRTI switch
+# Create indicator for NRTI switch
+dtg_0_19_full <- dtg_0_19_full %>%
+  mutate(
+    curr_nrtis = strsplit(arvtx_fixed, "\\+") %>% 
+      lapply(function(drugs) drugs[drugs %in% nrtis]),
+    
+    prev_nrtis = strsplit(prev_art_regimen, "\\+") %>% 
+      lapply(function(drugs) drugs[drugs %in% nrtis]),
+    
+    nrti_switch = mapply(function(curr, prev, cls) {
+      if (cls %in% c("naive", "reinitiator") || is.null(prev) || length(prev) == 0) {
+        return(0)
+      }
+      as.integer(!curr %in% prev)
+    }, curr_nrtis, prev_nrtis, prev_art_class_vf)
+  ) %>%
+  select(-curr_nrtis, -prev_nrtis)
+
+# count nrti switches
+dtg_0_19_full %>%
+  count(nrti_switch, name = "n") %>%
+  arrange(desc(n))
+
+#rm(list = setdiff(ls(), c("dtg_0_19_full", "vl_cleaned", "wa_tblart_clean")))
+```
+
+```{r}
+dtg_0_19_full <- dtg_0_19_full %>% 
+  left_join(wa_tblltfu %>% select(-program, -pat), by ="patient") %>%
+  left_join(wa_tblcenter, by ="program")
+
+dtg_0_19_full <- dtg_0_19_full %>% 
+  mutate(pdv = ifelse(as.numeric(difftime(close_d, l_alive_d, units = "days"))/30.4375 > 7, 1, 0))
+table(dtg_0_19_full$pdv) #665
+```
+
+
+```{r include=FALSE}
+art_f01 <- dtg_0_19_full %>% left_join(wa_tbllab_rna %>% select(-program), by ="patient")
+#MO :: baseline -- 1,901
+rna0 <- art_f01 %>%
+  filter(!is.na(rna_v)) %>%
+  filter(rna_d >= dtg_sd %m+% months(-6) & rna_d <= dtg_sd + days(30)) %>%
+  mutate(delai_rna_dtg = abs(as.numeric(difftime(dtg_sd, rna_d, units = "days"))))
+
+rna_0b <-  rna0 %>%
+  arrange(patient, delai_rna_dtg, rna_d) %>%
+  group_by(patient) %>%
+  slice_head(n = 1) %>%
+  ungroup() %>%
+  mutate(baseline_rna = 1, timp = 0)
+
+#create naif_vL_baseL & naif_vL_baseL_200c
+rna_0b <- rna_0b %>%
+  mutate(naif_vL_baseL_1000c = case_when(
+    naif ==1 & !is.na(rna_v) & rna_v < 1000 ~ "vL < 1000c",
+    naif ==1 & rna_v >= 1000 ~ "vL >= 1000c",
+    TRUE ~ "Unknown",
+  ))
+
+rna_0b <- rna_0b %>%
+  mutate(naif_vL_baseL_200c = case_when(
+    naif ==1 & !is.na(rna_v) & rna_v <200 ~ "vL < 200c",
+    naif ==1 & !is.na(rna_v) & rna_v >= 200 & rna_v <1000 ~ "200c <= vL < 1000c",
+    naif ==1 & rna_v >= 1000 ~ "vL >= 1000c",
+    TRUE ~ "Unknown",
+  )) %>%
+  mutate(rna_v0 = rna_v,
+         rna_d0 = rna_d) #%>% select(patient, rna_d0, timp, rna_v0, naif_vL_baseL_200c, naif_vL_baseL_1000c)
+
+```
+
+```{r}
+#M6 :: 1,754 
+rna6 <- art_f01 %>%
+  filter(!is.na(rna_v)) %>%
+  filter(rna_d >= dtg_sd %m+% months(3) & rna_d < dtg_sd %m+% months(9)) %>%
+  mutate(delai_rna_dtg = abs(as.numeric(difftime(dtg_sd, rna_d, units = "days"))))
+
+rna_6b <- rna6 %>%
+  arrange(patient, delai_rna_dtg, rna_d) %>%
+  group_by(patient) %>%
+  slice_head(n = 1) %>%
+  ungroup() %>%
+  mutate(timp = 6,
+         rna_v6 = rna_v,
+         rna_d6 = rna_d) #%>% select(patient, rna_d6, timp, rna_v6)
+#rna_v12 :: 2,068 
+rna12 <- art_f01 %>%
+  filter(!is.na(rna_v)) %>%
+  filter(rna_d >= dtg_sd %m+% months(6) & rna_d < dtg_sd %m+% months(18)) %>%
+  mutate(delai_rna_dtg = abs(as.numeric(difftime(dtg_sd, rna_d, units = "days"))))
+
+rna_12b <- rna12 %>%
+  arrange(patient, delai_rna_dtg, rna_d) %>%
+  group_by(patient) %>%
+  slice_head(n = 1) %>%
+  ungroup() %>%
+ mutate(timp = 12,
+        rna_v12 = rna_v,
+        rna_d12 = rna_d) #%>% select(patient, rna_d12, timp, rna_v12)
+#rna_v24 :: 1,525 
+rna24 <- art_f01 %>%
+  filter(!is.na(rna_v)) %>%
+  filter(rna_d >= dtg_sd %m+% months(18) & rna_d < dtg_sd %m+% months(30)) %>%
+  mutate(delai_rna_dtg = abs(as.numeric(difftime(dtg_sd, rna_d, units = "days"))))
+
+rna_24b <- rna24 %>%
+  arrange(patient, delai_rna_dtg, rna_d) %>%
+  group_by(patient) %>%
+  slice_head(n = 1) %>%
+  ungroup() %>%
+  mutate(timp = 24,
+         rna_v24 = rna_v,
+         rna_d24 = rna_d) #%>% select(patient, rna_d24, timp, rna_v24)
+
+rna_0b <- rna_0b %>% arrange(patient)
+rna_6b <- rna_6b %>% arrange(patient)
+rna_12b <- rna_12b %>% arrange(patient)
+rna_24b <- rna_24b %>% arrange(patient)
+dtg_0_19_full <- dtg_0_19_full %>% arrange(patient)
+#rna_date <- wa_tbllab_rna %>% select(patient, rna_d) %>% arrange(patient)
+anal_base1 <- bind_rows(rna_0b, rna_6b, rna_12b, rna_24b)
+
+anal_base1 <- anal_base1 %>%
+  mutate(
+    rna_date_tp = case_when(
+      timp == 0  ~ rna_d0,
+      timp == 6  ~ rna_d6,
+      timp == 12 ~ rna_d12,
+      timp == 24 ~ rna_d24
+    ),
+    rna_v_tp = case_when(
+      timp == 0  ~ rna_v0,
+      timp == 6  ~ rna_v6,
+      timp == 12 ~ rna_v12,
+      timp == 24 ~ rna_v24
+    )
+  )
+anal_base1 <- anal_base1 %>% arrange(patient)
+```
+
+```{r}
+anal_base1 <- anal_base1 %>%
+  group_by(patient) %>%
+  mutate(
+    has_timp0 = any(timp == 0),
+    has_timp6 = any(timp == 6),
+    has_timp12 = any(timp == 12),
+    has_timp24 = any(timp == 24),
+    
+    rna_class_0 = case_when(
+      !has_timp0              ~ "Missing",
+      timp != 0              ~ "Unknown",
+      !is.na(rna_v0) & rna_v0 < 200        ~ "Undetectable",
+      rna_v0 >= 200 & rna_v0 < 1000        ~ "Viremia",
+      rna_v0 >= 1000                      ~ "Failure",
+      is.na(rna_v0)                       ~ "Missing"
+    ),
+    
+    rna_class_6 = case_when(
+      !has_timp6              ~ "Missing",
+      timp != 6              ~ "Unknown",
+      !is.na(rna_v6) & rna_v6 < 200        ~ "Undetectable",
+      rna_v6 >= 200 & rna_v6 < 1000        ~ "Viremia",
+      rna_v6 >= 1000                      ~ "Failure",
+      is.na(rna_v6)                       ~ "Missing"
+    ),
+    
+    rna_class_12 = case_when(
+      !has_timp12              ~ "Missing",
+      timp != 12              ~ "Unknown",
+      !is.na(rna_v12) & rna_v12 < 200        ~ "Undetectable",
+      rna_v12 >= 200 & rna_v12 < 1000        ~ "Viremia",
+      rna_v12 >= 1000                      ~ "Failure",
+      is.na(rna_v12)                       ~ "Missing"
+    ),
+    
+    rna_class_24 = case_when(
+      !has_timp24              ~ "Missing",
+      timp != 24              ~ "Unknown",
+      !is.na(rna_v24) & rna_v24 < 200        ~ "Undetectable",
+      rna_v24 >= 200 & rna_v24 < 1000        ~ "Viremia",
+      rna_v24 >= 1000                      ~ "Failure",
+      is.na(rna_v24)                       ~ "Missing"
+    )
+  ) %>%
+  select(-has_timp0, -has_timp6, -has_timp12, -has_timp24) %>%
+  ungroup()
+```
+
+
+```{r include=FALSE}
+#write.csv2(anal_base1, "anal_bdd_v22-05-25.csv")
+#ana <- art_f %>% left_join(anal_base1, by="patient")
+```
+
+\newpage
+### describ1e study population : Survival time (median [IQR]) by center
+```{r include=FALSE}
+#describ1e()
+anal_base1 <- anal_base1 %>%
+  mutate(surv_time = as.numeric(difftime(rna_d, dtg_sd, units = "days"))/30.4375,
+         surv_time = ifelse(surv_time <0, 0, surv_time),
+         surv_time = ifelse(timp==0 & !(naif == 1 & surv_time >=0 & surv_time * 30.4375 <= 30), 0, surv_time))
+
+table0 <- anal_base1 %>%
+  ungroup() %>%
+  tbl_summary(by = "program", include = c(surv_time)) %>%
+  add_overall(last = TRUE)|> 
+  add_p() |>
+  bold_labels() |> 
+  modify_spanning_header(
+    update = all_stat_cols() ~ "**Characteristics : overall**"
+  )%>%
+  as_gt() %>%
+  opt_table_font(size = 10)
+
+#print
+table0
+```
+
+
+```{r}
+anal_base1 <- anal_base1 %>%
+  mutate(overall = "overall")
+
+describ1 <- anal_base1 %>%
+  arrange(patient) %>%
+  group_by(patient) %>%
+  slice(1) %>%
+  ungroup()
+
+describ1 <- describ1 %>%
+  mutate(
+    age_class_dtg = factor(age_class_dtg, levels = c("< 5 years", "5-9 years", "10-14 years", "15-19 years")),
+    rna_class_0 = factor(rna_class_0, levels = c("Undetectable", "Viremia", "Failure", "Missing")),
+    rna_class_12 = factor(rna_class_12, levels = c("Undetectable", "Viremia", "Failure", "Missing")),
+    rna_class_24 = factor(rna_class_24, levels = c("Undetectable", "Viremia", "Failure", "Missing"))     
+  )
+```
+
+
