@@ -11,3 +11,5 @@ Encoding: UTF-8
 
 RnwWeave: Sweave
 LaTeX: pdfLaTeX
+
+#[à revoir pour une appropriation judicieuse de git & github : intégrer à tous les projets et analyses]
