@@ -44,7 +44,7 @@ knitr::include_graphics("C:/Users/Emile/Desktop/desc_imag_iedea/imag00.png")
 ```
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
-# Les packages nécessaires 
+# Packages for management and analysis 
 library(VIM) # selc_var
 library(ggplot2) #graphiq
 library(readr) #import dataframe
